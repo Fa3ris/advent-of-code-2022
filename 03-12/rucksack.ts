@@ -40,4 +40,15 @@ function main() {
   reader.run();
 }
 
+function computePriority(char: string): number {
+  const isUpperCase = char === char.toUpperCase();
+
+  const intruder_CharCode = char.toLowerCase().charCodeAt(0);
+
+  const diff = intruder_CharCode - a_charCode;
+
+  const priority = 1 + diff + (isUpperCase ? 26 : 0);
+
+  return priority;
+}
 main();
