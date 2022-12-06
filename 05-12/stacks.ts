@@ -1,19 +1,6 @@
 import { resolve } from "path";
 import { AllReader } from "../helper/all-reader";
 
-const mapping = {
-  1: 1,
-  5: 2,
-  9: 3,
-  13: 4,
-  17: 5,
-  21: 6,
-  25: 7,
-  29: 8,
-  33: 9,
-};
-
-// index === 1 + i * 4 => stack i + 1
 function main() {
   const r = new AllReader(resolve(__dirname, "input.txt"));
 
@@ -33,18 +20,17 @@ function main() {
     }
 
     for (let j = emptyLine - 2; j >= 0; j--) {
-      const row = [...lines[j].matchAll(/[\w]/g)];
-      for (let match of row) {
-        const matchIndex = match.index;
-        if (!matchIndex) {
-          throw "missing index";
+      const re = /\s?\[(?<letter>\w+)\]\s?|\s{4}/g;
+
+      let match;
+      let col = 0;
+      while ((match = re.exec(lines[j]))) {
+        console.log(match);
+        const letter = match.groups?.letter || "";
+        if (letter) {
+          mapOfStacks.get(col + 1)?.push(letter);
         }
-        let i = 0;
-        while (1 + i * 4 != matchIndex) {
-          // works because only 1-digit stack index, no 10, 11, ...
-          ++i;
-        }
-        mapOfStacks.get(i + 1)?.push(match[0]);
+        ++col;
       }
     }
 
@@ -75,6 +61,9 @@ function main() {
       ""
     );
     console.log(result);
+    if (result !== "VWLCWGSDQ") {
+      throw "invalid response";
+    }
   });
 
   r.run();
