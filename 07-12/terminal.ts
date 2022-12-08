@@ -71,9 +71,44 @@ class FS {
   getTotalSumOfDirectoriesWithSizeAtMost(size: number): number {
     const root = this.sumNode(this.root);
     const validNodes: SumNode[] = [];
-    this.visitSums(root, size, validNodes);
+    this.visitSumsPredicate(root, (node) => node.size <= size, validNodes);
+    // this.visitSums(root, size, validNodes);
     const res = validNodes.reduce((sum, n) => sum + n.size, 0);
     return res;
+  }
+
+  getSizeOfDirToDelete(totalSpace: number, requiredSpace: number): number {
+    const root = this.sumNode(this.root);
+    console.log("root size is", root.size);
+    const freeSpace = totalSpace - root.size;
+    console.log("free space is", freeSpace);
+    const spaceToDelete = requiredSpace - freeSpace;
+    console.log("need to find at least space", spaceToDelete);
+    const validNodes: SumNode[] = [];
+    this.visitSumsPredicate(
+      root,
+      (node) => node.size >= spaceToDelete,
+      validNodes
+    );
+
+    console.log(validNodes);
+
+    validNodes.sort((n1, n2) => n1.size - n2.size);
+
+    return validNodes[0].size;
+  }
+
+  private visitSumsPredicate(
+    node: SumNode,
+    predicate: (node: SumNode) => boolean,
+    validNodes: SumNode[]
+  ) {
+    if (predicate(node)) {
+      validNodes.push(node);
+    }
+    node.children?.forEach((current) =>
+      this.visitSumsPredicate(current, predicate, validNodes)
+    );
   }
 
   private visitSums(node: SumNode, n: number, validNodes: SumNode[]) {
@@ -164,7 +199,7 @@ function isFileNode(child: DirNode | FileNode): child is FileNode {
   return child.type === "file";
 }
 
-function run(instructions: string[]): void {
+function createFS(instructions: string[]): FS {
   const fs = new FS();
   let line = 0;
   while (line < instructions.length) {
@@ -187,40 +222,101 @@ function run(instructions: string[]): void {
       line++;
     }
   }
+
+  return fs;
+}
+function run(instructions: string[]): void {
+  const fs = createFS(instructions);
+  const n = 100000;
   const res = fs.getTotalSumOfDirectoriesWithSizeAtMost(100000);
-  console.log(res);
+  console.log(`total size of dir with size at most ${n}`, res);
 
-  if (res === 1290203) {
-    throw "invalid response";
-  }
-
-  if (res === 1386384) {
-    throw "invalid response";
-  }
-
-  if (res !== 1513699) {
-    throw new Error(`answer must be ${1513699}`);
-  }
-
-  const higher = 1386384 > 1290203;
-
-  if (higher) {
-    console.log("higher");
-  }
-
-  const higher2 = 1513699 > 1386384;
-  if (higher2) {
-    console.log("higher2");
+  const answer = 1513699;
+  if (res !== answer) {
+    throw new Error(`answer must be ${answer}`);
   }
 }
 
+type Q1 = {
+  dirLimitSize: number;
+  answer?: number;
+};
+
+type Q2 = {
+  totalSpace: number;
+  requiredSpace: number;
+  answer?: number;
+};
+function createRunner(path: string, q: { q1?: Q1; q2?: Q2 }): { run(): void } {
+  const r = new AllReader(resolve(__dirname, path));
+
+  const { q1, q2 } = q;
+
+  const fn = (lines: string[]) => {
+    const fs = createFS(lines);
+
+    let res1: number | undefined;
+    let res2: number | undefined;
+    if (q1) {
+      res1 = fs.getTotalSumOfDirectoriesWithSizeAtMost(q1.dirLimitSize);
+      console.log(
+        `total size of dir with size at most ${q1.dirLimitSize} =`,
+        res1
+      );
+      if (q1.answer) {
+        if (res1 !== q1.answer) {
+          throw new Error(`answer 1 must be ${q1.answer}`);
+        } else {
+          console.log("correct answer 1");
+        }
+      }
+    }
+
+    if (q2) {
+      res2 = fs.getSizeOfDirToDelete(q2.totalSpace, q2.requiredSpace);
+      console.log(
+        `size of dir to delete for free space ${q2.totalSpace} and required space ${q2.requiredSpace} =`,
+        res2
+      );
+      if (q2.answer) {
+        if (res2 !== q2.answer) {
+          throw new Error(`answer 2 must be ${q2.answer}`);
+        } else {
+          console.log("correct answer 2");
+        }
+      }
+    }
+  };
+  r.addLinesListener(fn);
+  return r;
+}
+
 function main() {
-  // const r = new AllReader(resolve(__dirname, "test.txt"));
-  const r = new AllReader(resolve(__dirname, "input.txt"));
+  const runnerTest = createRunner(resolve(__dirname, "test.txt"), {
+    q1: {
+      dirLimitSize: 100000,
+      answer: 95437,
+    },
+    q2: {
+      totalSpace: 70000000,
+      requiredSpace: 30000000,
+      answer: 24933642,
+    },
+  });
 
-  r.addLinesListener(run);
+  const runner = createRunner(resolve(__dirname, "input.txt"), {
+    q1: {
+      dirLimitSize: 100000,
+      answer: 1513699,
+    },
+    q2: {
+      totalSpace: 70000000,
+      requiredSpace: 30000000,
+    },
+  });
 
-  r.run();
+  // runnerTest.run();
+  runner.run();
 }
 
 main();
