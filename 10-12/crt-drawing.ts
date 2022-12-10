@@ -39,8 +39,8 @@ class CPU {
     this._x += val;
   }
 
-  printLine(): string {
-    const arr = Array(40).fill(".");
+  printSprite(): string {
+    const arr = Array(CRT.cols).fill(".");
 
     for (let i = this.x - 1; i <= this._x + 1; i++) {
       arr[i] = "#";
@@ -50,11 +50,14 @@ class CPU {
 }
 
 class CRT {
-  private arr: string[] = Array(40 * 6).fill("");
+  private arr: string[] = Array(CRT.cols * CRT.rows).fill("");
   private index = 0;
 
+  static cols = 40;
+  static rows = 6;
+
   draw(x: number) {
-    const virtualIndex = this.index % 40;
+    const virtualIndex = this.index % CRT.cols;
     const visible = Math.abs(virtualIndex - x) < 2;
     if (visible) {
       console.log("light for", {
@@ -79,18 +82,15 @@ class CRT {
       });
     }
 
-    const res: string[][] = [];
+    const rows: string[][] = [];
     while (arr.length > 0) {
-      res.push(arr.splice(0, 40));
+      rows.push(arr.splice(0, CRT.cols));
     }
-
-    console.log(res);
-    return res.map((s) => s.join("")).join("\n");
+    return rows.map((s) => s.join("")).join("\n");
   }
 
   printLine(n: number) {
-    const arr = [...this.arr];
-    return arr.slice(40 * n, 40).join("");
+    return [...this.arr].slice(CRT.cols * n, CRT.cols * (n + 1)).join("");
   }
 }
 function main(
@@ -113,65 +113,38 @@ function main(
 
   let pc = 0;
 
-  while (pc < lines.length) {
-    const { op, value } = lines[pc++].match(re)?.groups || {};
+  function executeInstruction(op: string, value?: string) {
+    const OP_Cycles: Record<string, number> = {
+      noop: 1,
+      addx: 2,
+    };
 
-    if (op === "noop") {
-      console.log(op);
+    for (let i = 0; i < OP_Cycles[op]; i++) {
+      clock.beginCycle();
+      console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
 
-      {
-        clock.beginCycle();
-        console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
+      crt.draw(cpu.x);
 
-        crt.draw(cpu.x);
+      const crtLine = Math.floor((clock.cycle - 1) / CRT.cols);
 
-        const crtLine = Math.floor(clock.cycle / 40);
+      process.stdout.write(
+        `crt\n${crt.printLine(crtLine)}\nsprite\n${cpu.printSprite()}\n`
+      );
 
-        process.stdout.write(
-          `crt\n${crt.printLine(crtLine)}\ncpu\n${cpu.printLine()}\n`
-        );
+      clock.endCycle();
 
-        clock.endCycle();
-        console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
-      }
-    } else if (op === "addx") {
-      console.log(op, value);
-      {
-        clock.beginCycle();
-        console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
-
-        crt.draw(cpu.x);
-
-        const crtLine = Math.floor(clock.cycle / 40);
-
-        process.stdout.write(
-          `crt\n${crt.printLine(crtLine)}\ncpu\n${cpu.printLine()}\n`
-        );
-
-        clock.endCycle();
-        console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
-      }
-
-      {
-        clock.beginCycle();
-        console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
-
-        crt.draw(cpu.x);
-
-        const crtLine = Math.floor(clock.cycle / 40);
-
-        process.stdout.write(
-          `crt\n${crt.printLine(crtLine)}\ncpu\n${cpu.printLine()}\n`
-        );
-
-        clock.endCycle();
+      if (value && i == OP_Cycles[op] - 1) {
         cpu.addX(Number(value));
-        console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
       }
+
+      console.log({ cycle: clock.cycle, isInCycle: clock.inCycle, x: cpu.x });
     }
   }
 
-  console.log(crt.printScreen());
+  while (pc < lines.length) {
+    const { op, value } = lines[pc++].match(re)?.groups || {};
+    executeInstruction(op, value);
+  }
 
   const { eraseDot, snap, out } = config || {};
   const screen = crt.printScreen(eraseDot);
