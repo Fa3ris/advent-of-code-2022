@@ -50,6 +50,12 @@ class Monkey {
 
   private _passTo: ((item: Item, monkeyId: number) => void) | undefined;
 
+  private _adjust: ((worry: Worry) => Worry) | undefined;
+
+  set adjust(fn: (worry: Worry) => Worry) {
+    this._adjust = fn;
+  }
+
   set passTo(fn: (item: Item, monkeyId: number) => void) {
     this._passTo = fn;
   }
@@ -95,13 +101,17 @@ class Monkey {
     let item: Item | undefined;
     this._log && console.log(`monkey ${this._id} plays`);
     while ((item = this.items.shift())) {
-      this._log && console.log("begin proceed item", item.bigWorry);
+      this._log && console.log("begin proceed item", item.worry);
       this._inspected++;
-      item.bigWorry = this.config.inspectBig(item.bigWorry);
-      this._log && console.log("after inspect worry =", item.bigWorry);
-      const { dest: newMonkey, newVal } = this.config.decide2(item.bigWorry);
-      item.bigWorry = newVal;
-      this._log && console.log("after decide worry =", item.bigWorry);
+      item.worry = this.config.inspect(item.worry);
+      this._log && console.log("after inspect worry =", item.worry);
+      item.worry = this._adjust?.(item.worry) || 0;
+      this._log && console.log("after adjust worry =", item.worry);
+      // const { dest: newMonkey, newVal } = this.config.decide(item.worry);
+      const newMonkey = this.config.decide(item.worry);
+
+      // item.bigWorry = newVal;
+      this._log && console.log("after decide worry =", item.worry);
       this._passTo?.(item, newMonkey);
       this._log &&
         console.log(
@@ -237,12 +247,18 @@ const operationRE = /(?<op1>\w+) (?<operator>\+|\*) (?<op2>\w+)/;
 const trueRE = /\d+/;
 const falseRE = /\d+/;
 
-function main(filename: string, answer?: number, version = 1) {
+function main(
+  filename: string,
+  answer?: number,
+  version = 1,
+  answer2?: number
+) {
   const lines = readFileSync(resolve(__dirname, filename), {
     encoding: "utf-8",
   }).split(/\r|\n|\r\n/);
 
   const monkeyMap = new Map<number, Monkey>();
+  const divisors: number[] = [];
   for (let i = 0; i < lines.length; ) {
     const monkeyInstructions = lines.slice(i, i + 6);
     console.log(monkeyInstructions);
@@ -296,6 +312,8 @@ function main(filename: string, answer?: number, version = 1) {
       Number(falseDest)
     );
 
+    divisors.push(Number(divisor));
+
     const config: MonkeyConfig = {
       decide: decider,
       inspect: inspectOp,
@@ -313,6 +331,13 @@ function main(filename: string, answer?: number, version = 1) {
     i += 7;
   }
 
+  // works because divisors are prime numbers in the input - so no common factor to extract
+  const leastCommonMultiple = divisors.reduce((acc, val) => acc * val, 1);
+
+  const adjust = function (worry: Worry) {
+    return worry % leastCommonMultiple;
+  };
+
   const passTo = function (item: Item, monkeyId: number) {
     const monkey = monkeyMap.get(monkeyId);
     if (monkey) {
@@ -325,6 +350,7 @@ function main(filename: string, answer?: number, version = 1) {
 
   for (let m of monkeyMap.values()) {
     m.passTo = passTo;
+    m.adjust = adjust;
     m.log = log;
   }
 
@@ -407,6 +433,10 @@ function main(filename: string, answer?: number, version = 1) {
     console.log(max2);
     const monkeyBusiness = max2.reduce((acc, val) => acc * val, 1);
     console.log({ monkeyBusiness });
+
+    if (answer2 && answer2 != monkeyBusiness) {
+      throw new Error(`expected ${answer2}`);
+    }
   };
 
   if (version === 1) {
@@ -417,5 +447,5 @@ function main(filename: string, answer?: number, version = 1) {
 }
 
 // main("test.txt", 10605, 1);
-main("test.txt", 10605, 2);
-// main("input.txt", 119715);
+main("test.txt", 10605, 2, 2713310158);
+main("input.txt", 119715, 2);
