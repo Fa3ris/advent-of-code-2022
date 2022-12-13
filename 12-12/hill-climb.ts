@@ -144,9 +144,9 @@ function main(filename: string, answer?: number) {
 
   const { nodeMap, start, end } = buildGraph(lines);
 
-  const path = findPath(
+  const path = dijkstraByPredicate(
     { row: start.row, col: start.col },
-    { row: end.row, col: end.col },
+    (node: Node) => node === end,
     nodeMap
   );
 
@@ -337,6 +337,79 @@ function main2(filename: string, answer?: number) {
   if (answer && answer !== minDist) {
     throw new Error(`expected ${answer}`);
   }
+}
+
+function dijkstraByPredicate(
+  start: {
+    row: number;
+    col: number;
+  },
+  nodeMatcher: (node: Node) => boolean,
+  graph: Map<string, Node>
+): string[] {
+  const s = graph.get(formatEntry(start.row, start.col));
+
+  if (!s) {
+    throw new Error("start node not found in graph");
+  }
+
+  const totalSize = graph.size;
+
+  const visited = new Set<string>();
+
+  for (let n of graph.values()) {
+    n.dist = Infinity;
+  }
+
+  s.dist = 0;
+
+  while (visited.size < totalSize) {
+    let min = Infinity;
+    let minNode: Node | undefined;
+    for (let node of graph.values()) {
+      if (!visited.has(formatEntry(node.row, node.col))) {
+        if (node.dist < min) {
+          min = node.dist;
+          minNode = node;
+        }
+      }
+    }
+
+    if (!minNode) {
+      const remainingDist = [...graph.values()]
+        .filter((node) => !visited.has(formatEntry(node.row, node.col)))
+        .map((n) => n.dist);
+      console.log({ remainingDist });
+      throw new Error("min node not found");
+    }
+
+    if (nodeMatcher(minNode)) {
+      const path = [];
+      let node: Node | undefined = minNode;
+
+      while (node != undefined && node != s) {
+        path.push(node.letter);
+        node = node.prev;
+      }
+
+      path.reverse();
+      return path;
+    }
+
+    visited.add(formatEntry(minNode.row, minNode.col));
+
+    for (let [neighbor, weight] of minNode.neighbors) {
+      if (!visited.has(formatEntry(neighbor.row, neighbor.col))) {
+        const newDist = minNode.dist + weight;
+        if (neighbor.dist > newDist) {
+          neighbor.dist = newDist;
+        }
+        neighbor.prev = minNode;
+      }
+    }
+  }
+
+  throw new Error("target node not found");
 }
 
 function findPath(
