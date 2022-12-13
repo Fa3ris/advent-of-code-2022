@@ -45,11 +45,11 @@ class Node {
     return this._predecessor;
   }
 }
-function main(filename: string, answer?: number) {
-  const lines = readFileSync(resolve(__dirname, filename), {
-    encoding: "utf-8",
-  }).split(/\r|\n|\r\n/);
-
+function buildGraph(lines: string[]): {
+  nodeMap: Map<string, Node>;
+  start: Node;
+  end: Node;
+} {
   const rows = lines.length;
   const cols = lines[0].length;
 
@@ -126,11 +126,27 @@ function main(filename: string, answer?: number) {
     setNeighbors(node);
   }
 
-  console.log({ sNode, eNode });
+  if (!sNode || !eNode) {
+    throw new Error("missing node");
+  }
+
+  return {
+    nodeMap,
+    start: sNode,
+    end: eNode,
+  };
+}
+
+function main(filename: string, answer?: number) {
+  const lines = readFileSync(resolve(__dirname, filename), {
+    encoding: "utf-8",
+  }).split(/\r|\n|\r\n/);
+
+  const { nodeMap, start, end } = buildGraph(lines);
 
   const path = findPath(
-    { row: sNode!.row, col: sNode!.col },
-    { row: eNode!.row, col: eNode!.col },
+    { row: start.row, col: start.col },
+    { row: end.row, col: end.col },
     nodeMap
   );
 
@@ -421,7 +437,7 @@ function findPath(
   return path;
 }
 
-// main("test.txt", 31);
-// main("input.txt", 517);
-main2("test.txt", 29);
+main("test.txt", 31);
+main("input.txt", 517);
+// main2("test.txt", 29);
 // main2("input.txt", 512);
