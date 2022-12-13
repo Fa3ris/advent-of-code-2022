@@ -143,7 +143,12 @@ function main(filename: string, answer?: number) {
   }
 }
 
-function main2(filename: string) {
+/* 
+  not efficient but find the correct answer in a long long time
+
+  TODO: try to use BFS starting from end 'z' and finish when first encounter an 'a'
+*/
+function main2(filename: string, answer?: number) {
   const lines = readFileSync(resolve(__dirname, filename), {
     encoding: "utf-8",
   }).split(/\r|\n|\r\n/);
@@ -231,13 +236,74 @@ function main2(filename: string) {
   console.log({ startNodes, eNode });
 
   const paths: string[][] = [];
-  for (let s of startNodes) {
+
+  const visited = new Set<string>();
+  const groupsOfGroupOfNeighbors: Set<Node>[] = [];
+  for (let node of startNodes) {
+    if (visited.has(formatEntry(node.row, node.col))) {
+      continue;
+    }
+
+    const groupOfNeigbors = new Set<Node>();
+    visited.add(formatEntry(node.row, node.col));
+    groupOfNeigbors.add(node);
+
+    // find all connected 'a' neighbors
+    // BFS
+    const neighbors = node.neighbors;
+    while (neighbors.length > 0) {
+      const [neighbor] = neighbors.shift() || [];
+      if (!neighbor || visited.has(formatEntry(neighbor.row, neighbor.col))) {
+        continue;
+      }
+      if (neighbor.letter !== "a") {
+        continue;
+      }
+      visited.add(formatEntry(neighbor.row, neighbor.col));
+      groupOfNeigbors.add(neighbor);
+      for (let entry of neighbor.neighbors) {
+        neighbors.push(entry);
+      }
+    }
+    groupsOfGroupOfNeighbors.push(groupOfNeigbors);
+  }
+
+  console.log(groupsOfGroupOfNeighbors);
+  const validGroups: Set<Node>[] = [];
+  for (let group of groupsOfGroupOfNeighbors) {
+    const firstNode = [...group.values()][0];
+    try {
+      findPath(
+        { row: firstNode.row, col: firstNode.col },
+        { row: eNode!.row, col: eNode!.col },
+        nodeMap
+      );
+      console.log("valid group");
+      validGroups.push(group);
+    } catch (e) {
+      console.error("invalid group");
+    }
+  }
+
+  console.log({ total: validGroups.length, validGroups });
+
+  const nodesToTest: Node[] = [];
+  for (let groups of validGroups) {
+    nodesToTest.push(...[...groups.values()]);
+  }
+
+  console.log({ nodesToTest: nodesToTest.length });
+  const memoizedPaths = new Map<string, string[]>();
+  for (let s of nodesToTest) {
     try {
       const path = findPath(
         { row: s.row, col: s.col },
         { row: eNode!.row, col: eNode!.col },
-        nodeMap
+        nodeMap,
+        memoizedPaths
       );
+
+      memoizedPaths.set(formatEntry(s.row, s.col), path);
 
       paths.push(path);
     } catch (e) {
@@ -251,6 +317,10 @@ function main2(filename: string) {
   console.log(sortedDist);
   const minDist = sortedDist.shift();
   console.log(minDist);
+
+  if (answer && answer !== minDist) {
+    throw new Error(`expected ${answer}`);
+  }
 }
 
 function findPath(
@@ -262,7 +332,8 @@ function findPath(
     row: number;
     col: number;
   },
-  graph: Map<string, Node>
+  graph: Map<string, Node>,
+  memoizedPaths?: Map<string, string[]>
 ): string[] {
   const s = graph.get(formatEntry(start.row, start.col));
   const e = graph.get(formatEntry(end.row, end.col));
@@ -277,6 +348,11 @@ function findPath(
 
   for (let n of graph.values()) {
     n.dist = Infinity;
+    const memoizedKey = formatEntry(n.row, n.col);
+    if (memoizedPaths && memoizedPaths.has(memoizedKey)) {
+      console.log("found memoized dist for ", n);
+      n.dist = memoizedPaths.get(memoizedKey)?.length || Infinity;
+    }
   }
 
   s.dist = 0;
@@ -321,8 +397,6 @@ function findPath(
 
     visited.add(formatEntry(minNode.row, minNode.col));
 
-    // console.log({ visitedSize: visited.size });
-
     for (let [neighbor, weight] of minNode.neighbors) {
       if (!visited.has(formatEntry(neighbor.row, neighbor.col))) {
         const newDist = minNode.dist + weight;
@@ -349,5 +423,5 @@ function findPath(
 
 // main("test.txt", 31);
 // main("input.txt", 517);
-main2("test.txt");
-main2("input.txt");
+main2("test.txt", 29);
+// main2("input.txt", 512);
