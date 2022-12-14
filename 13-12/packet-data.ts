@@ -193,6 +193,12 @@ function testPackets(left: string, right: string, answer: boolean) {
   console.log("\n");
 }
 
+function comparePacketString(left: string, right: string): boolean | undefined {
+  return compareTopPackets(
+    parsePacket(left, 0).packet,
+    parsePacket(right, 0).packet
+  );
+}
 function compareTopPackets(left: Packet, right: Packet): boolean | undefined {
   LOG && console.log("compare top", JSON.stringify({ left, right }));
   return comparePackets(left, right, 0);
@@ -284,8 +290,62 @@ function main(filename: string, answer?: number) {
   }
 }
 
+function main2(filename: string, answer?: number) {
+  const lines = readFileSync(resolve(__dirname, filename), {
+    encoding: "utf-8",
+  })
+    .split(/\r|\n|\r\n/)
+    .filter((s) => s.length !== 0);
+
+  lines.sort(PacketComparator);
+
+  const dividers = ["[[2]]", "[[6]]"];
+
+  const indices: number[] = [];
+  let startIndex = 0;
+  for (let i = 0; i < dividers.length; i++) {
+    const divider = dividers[i];
+    for (let j = startIndex; j < lines.length; j++) {
+      const isInOrder = comparePacketString(divider, lines[j]);
+      if (isInOrder === true) {
+        indices.push(j + 1);
+        lines.splice(j, 0, divider);
+        startIndex = j;
+        break;
+      }
+    }
+  }
+
+  console.log(lines);
+  console.log(indices);
+
+  const decoderKey = indices.reduce((acc, val) => acc * val, 1);
+  console.log({ decoderKey });
+
+  if (answer && answer !== decoderKey) {
+    throw new Error(`expected ${answer}`);
+  }
+}
+
 main("test.txt", 13);
 // 6133 is too high
 // 6117 is too high
 // 6113 is too high
 main("input.txt", 6101);
+main2("test.txt", 140);
+main2("input.txt", 21909);
+
+function PacketComparator(left: string, right: string): number {
+  const res = compareTopPackets(
+    parsePacket(left, 0).packet,
+    parsePacket(right, 0).packet
+  );
+
+  if (res === undefined) {
+    return 0;
+  }
+
+  return res === true ? -1 : 1;
+}
+
+
