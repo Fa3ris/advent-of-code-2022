@@ -23,6 +23,10 @@ class Row {
   get empty() {
     return [...this.emptyPositions.values()];
   }
+
+  get emptyAndBeacon() {
+    return [...this.empty, ...this.beacons.values()];
+  }
   constructor(private row: number, allBeacons: Beacon[]) {
     allBeacons.forEach((b) => {
       if (b.y === row) {
@@ -103,7 +107,10 @@ const shortedDistToRow = manhattanDist(sensor.pos, {
 });
 console.log({ shortedDistToRow });
 
-function findAbsentBeacons(lines: string[], row: number) {
+function createBeaconsAndSensors(lines: string[]): {
+  beacons: Beacon[];
+  sensors: Sensor[];
+} {
   const re = /x=(?<sx>-?\w+), y=(?<sy>-?\w+).*x=(?<bx>-?\w+), y=(?<by>-?\w+)/;
 
   const allBeacons: Beacon[] = [];
@@ -116,6 +123,16 @@ function findAbsentBeacons(lines: string[], row: number) {
     sensors.push(sensor);
   }
 
+  return {
+    beacons: allBeacons,
+    sensors,
+  };
+}
+function findAbsentBeacons(lines: string[], row: number) {
+  const re = /x=(?<sx>-?\w+), y=(?<sy>-?\w+).*x=(?<bx>-?\w+), y=(?<by>-?\w+)/;
+
+  const { beacons: allBeacons, sensors } = createBeaconsAndSensors(lines);
+
   const targetRow = new Row(row, allBeacons);
 
   for (let sensor of sensors) {
@@ -123,15 +140,17 @@ function findAbsentBeacons(lines: string[], row: number) {
   }
 
   const res = targetRow.empty;
-  res.sort((coord1, coord2) => {
-    const re = /(?<x>-?\w+)/;
-    const a = Number(coord1.match(re)?.groups?.x);
-    const b = Number(coord2.match(re)?.groups?.x);
-    return a - b;
-  });
+  res.sort(pointStringSorter);
   console.log(res, res.length);
 
   return res.length;
+}
+
+function pointStringSorter(coord1: string, coord2: string) {
+  const re = /(?<x>-?\d+)/;
+  const a = Number(coord1.match(re)?.groups?.x);
+  const b = Number(coord2.match(re)?.groups?.x);
+  return a - b;
 }
 
 const l2 = "Sensor at x=0, y=11: closest beacon is at x=2, y=10";
@@ -151,6 +170,99 @@ function main(filename: string, row: number, answer?: number) {
   }
 }
 
-main("test.txt", 10, 26);
+function createPointCoordFilter(lower: number, upper: number) {
+  const re = /(?<x>-?\d+),(?<y>-?\d+)/;
 
-main("input.txt", 2000000, 5335787);
+  return (coord: string) => {
+    const { x, y } = coord.match(re)?.groups || {};
+    const xVal = Number(x);
+    const yVal = Number(y);
+
+    return xVal >= lower && xVal <= upper && yVal >= lower && yVal <= upper;
+  };
+}
+
+function main2(
+  filename: string,
+  lowerBound: number,
+  upperBound: number,
+  answer?: number
+) {
+  const lines = readFileSync(resolve(__dirname, filename), {
+    encoding: "utf-8",
+  }).split(/\r|\n|\r\n/);
+
+  const { beacons: allBeacons, sensors } = createBeaconsAndSensors(lines);
+
+  const targetRows: Row[] = [];
+
+  for (let row = lowerBound; row <= upperBound; row++) {
+    const targetRow = new Row(row, allBeacons);
+    targetRows.push(targetRow);
+    console.log("check row", row);
+    for (let sensor of sensors) {
+      targetRow.receive(sensor.findWhereBeaconIsNot(row));
+    }
+  }
+
+  const emptiesFilter = createPointCoordFilter(lowerBound, upperBound);
+
+  const emptiesAndBeacons = targetRows.map((r) => r.emptyAndBeacon);
+  emptiesAndBeacons.forEach((e, index, arr) => {
+    e.sort(pointStringSorter);
+    console.log(e, e.length);
+
+    arr[index] = e.filter(emptiesFilter);
+  });
+
+  emptiesAndBeacons.forEach((e, index, arr) => {
+    console.log(e, e.length);
+  });
+
+  const expectedCount = upperBound - lowerBound + 1;
+  console.log({ expectedCount });
+
+  const rowWithBeacon = emptiesAndBeacons.find(
+    (list) => list.length < expectedCount
+  );
+
+  if (!rowWithBeacon) {
+    throw new Error("no row found");
+  }
+
+  console.log({ rowWithBeacon });
+  const reY = /,(?<y>-?\d+)/;
+  const reX = /(?<x>-?\d+)/;
+  const { y } = rowWithBeacon[0].match(reY)?.groups || {};
+  let searchedX;
+  for (let i = lowerBound; i < upperBound; i++) {
+    const { x: xString } = rowWithBeacon[i].match(reX)?.groups || {};
+    const x = Number(xString);
+
+    if (x !== i) {
+      searchedX = i;
+      break;
+    }
+  }
+
+  if (!searchedX) {
+    throw new Error("no x found");
+  }
+
+  console.log({ y });
+  console.log({ searchedX });
+
+  const tuningFreq = searchedX * 4000000 + Number(y);
+
+  console.log({ tuningFreq });
+
+  if (answer && answer != tuningFreq) {
+    throw new Error(`expected ${answer}`);
+  }
+}
+
+main("test.txt", 10, 26);
+// main("input.txt", 2000000, 5335787);
+main2("test.txt", 0, 20, 56000011);
+// main2("input.txt", 0, 4000000);
+
