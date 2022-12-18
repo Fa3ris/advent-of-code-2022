@@ -43,6 +43,63 @@ class Row {
       this.emptyPositions.add(c);
     });
   }
+
+  private ranges: [number, number][] = [];
+
+  get emptyRanges() {
+    return this.ranges;
+  }
+
+  get knownBeacons() {
+    return this.beacons.size;
+  }
+
+  private minRange = 0;
+  private maxRange = 4000000;
+
+  receiveRange(candidate: [number, number]) {
+    // TODO - remove where we know there is a beacon // split into to sub-range
+    console.log("receive range", candidate);
+
+    candidate[0] = Math.max(candidate[0], this.minRange);
+    candidate[1] = Math.min(candidate[1], this.maxRange);
+
+    const place = this.ranges.findIndex((r) => r[0] > candidate[0]);
+    if (place >= 0) {
+      this.ranges.splice(place, 0, candidate);
+    } else {
+      this.ranges.push(candidate);
+    }
+
+    let index = 0;
+    while (index < this.ranges.length - 1) {
+      if (this.overlap(this.ranges[index], this.ranges[index + 1])) {
+        const merged = this.mergeRanges(
+          this.ranges[index],
+          this.ranges[index + 1]
+        );
+        const deleted = this.ranges.splice(index, 2, merged);
+        // console.log("merged", deleted, "into", merged);
+      } else {
+        index++;
+      }
+    }
+  }
+
+  private overlap(r1: [number, number], r2: [number, number]): boolean {
+    try {
+      return r1[0] <= r2[1] && r1[1] >= r2[0];
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private mergeRanges(
+    r1: [number, number],
+    r2: [number, number]
+  ): [number, number] {
+    return [Math.min(r1[0], r2[0]), Math.max(r1[1], r2[1])];
+  }
 }
 
 class Sensor {
@@ -81,6 +138,23 @@ class Sensor {
       res.push(formatPoint({ x, y: row }));
     }
 
+    return res;
+  }
+
+  findRangeWhereBeaconIsNot(row: number): [number, number] | undefined {
+    const projectionToRow = Math.abs(this.pos.y - row);
+
+    const remainingDist = this.dist - projectionToRow;
+
+    if (remainingDist < 0) {
+      // did not reach row
+      return;
+    }
+
+    const res: [number, number] = [
+      this.pos.x - remainingDist,
+      this.pos.x + remainingDist,
+    ];
     return res;
   }
 }
@@ -136,14 +210,29 @@ function findAbsentBeacons(lines: string[], row: number) {
   const targetRow = new Row(row, allBeacons);
 
   for (let sensor of sensors) {
-    targetRow.receive(sensor.findWhereBeaconIsNot(row));
+    // targetRow.receive(sensor.findWhereBeaconIsNot(row));
+    const range = sensor.findRangeWhereBeaconIsNot(row);
+    if (range) {
+      targetRow.receiveRange(range);
+    }
   }
 
   const res = targetRow.empty;
   res.sort(pointStringSorter);
   console.log(res, res.length);
 
-  return res.length;
+  const ranges = targetRow.emptyRanges;
+  let total = 0;
+  ranges.forEach(([lower, upper]) => {
+    total += upper - lower + 1;
+  });
+
+  console.log({
+    ranges: targetRow.emptyRanges,
+    totalPos: total - targetRow.knownBeacons,
+  });
+
+  return total - targetRow.knownBeacons;
 }
 
 function pointStringSorter(coord1: string, coord2: string) {
@@ -155,8 +244,6 @@ function pointStringSorter(coord1: string, coord2: string) {
 
 const l2 = "Sensor at x=0, y=11: closest beacon is at x=2, y=10";
 const l3 = "Sensor at x=8, y=7: closest beacon is at x=2, y=10";
-
-findAbsentBeacons([l2, l1, l3], 10);
 
 function main(filename: string, row: number, answer?: number) {
   const lines = readFileSync(resolve(__dirname, filename), {
@@ -196,13 +283,47 @@ function main2(
 
   const targetRows: Row[] = [];
 
+  console.time("ALL");
   for (let row = lowerBound; row <= upperBound; row++) {
     const targetRow = new Row(row, allBeacons);
     targetRows.push(targetRow);
     console.log("check row", row);
-    for (let sensor of sensors) {
-      targetRow.receive(sensor.findWhereBeaconIsNot(row));
+    const ranges: [number, number][] = [];
+
+    console.time("collect ranges");
+    sensors.forEach((s) => {
+      console.time("find range");
+      const range = s.findRangeWhereBeaconIsNot(row);
+      console.timeEnd("find range");
+
+      if (range) {
+        ranges.push(range);
+      }
+    });
+    console.timeEnd("collect ranges");
+
+    console.log(ranges.length);
+
+    console.time("add ranges");
+    ranges.forEach((r) => {
+      targetRow.receiveRange(r);
+    });
+    console.timeEnd("add ranges");
+
+    if (targetRow.emptyRanges.length > 1) {
+      console.log("more than 2 ranges");
+      console.log(row);
+      console.log(targetRow.emptyRanges);
+      break;
     }
+    console.log("\n\n");
+  }
+
+  console.timeEnd("ALL");
+
+  let exit = true;
+  if (exit) {
+    return;
   }
 
   const emptiesFilter = createPointCoordFilter(lowerBound, upperBound);
@@ -264,5 +385,22 @@ function main2(
 main("test.txt", 10, 26);
 // main("input.txt", 2000000, 5335787);
 main2("test.txt", 0, 20, 56000011);
-// main2("input.txt", 0, 4000000);
+
+/* row = 3349056
+ col = 3418492 
+ WAY WAY WAY TOO SLOW !!!!!!!
+ */
+
+let wantToWasteTime = false;
+/* 
+ 
+  other solution: use worker threads
+
+  or find collision between edge lines of sensors
+ 
+ */
+
+if (wantToWasteTime) {
+  main2("input.txt", 0, 4000000, 13673971349056);
+}
 
