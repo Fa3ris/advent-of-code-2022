@@ -149,20 +149,20 @@ function main2(filename: string, answer?: number) {
   const responses: FlowResponse[][] = [];
   let count = 0;
   for (let [p1, p2] of partitions) {
-    const maxFlow1 = createMaxFlow2(graph, pathFinder);
-    console.log("partition", ++count, "/", partitions.length);
+    const maxFlow1 = createMaxFlow(graph, pathFinder);
+    false && console.log("partition", ++count, "/", partitions.length);
     const flowResponses: FlowResponse[] = [];
     false && console.group("partition group");
     if (p1.size > 0) {
       false && console.log("p1", p1);
-      const flow1 = maxFlow1(root, time, p1, [], new Set(p1));
+      const flow1 = maxFlow1(root, time, p1, []);
       flowResponses.push(flow1);
     }
 
     if (p2.size > 0) {
-      const maxFlow2 = createMaxFlow2(graph, pathFinder);
+      const maxFlow2 = createMaxFlow(graph, pathFinder);
       false && console.log("p2", p2);
-      const flow2 = maxFlow2(root, time, p2, [], new Set(p2));
+      const flow2 = maxFlow2(root, time, p2, []);
       flowResponses.push(flow2);
     }
     responses.push(flowResponses);
@@ -265,212 +265,6 @@ function bfs(
     n: path.length - 1,
     path,
   };
-}
-/* 
-    remove flow rate 0,
-
-
-*/
-function maxFlow(
-  current: Valve,
-  time: number,
-  notVisited: Set<string>,
-  visited: Set<string>,
-  graph: Map<string, Valve>,
-  pathFinder: (start: string, end: string) => number,
-  memoized: Map<string, FlowResponse>
-): FlowResponse {
-  return {
-    flow: 0,
-    visited: [],
-  };
-}
-
-function createMaxFlow2(
-  graph: Map<string, Valve>,
-  pathFinder: (start: string, end: string) => number
-) {
-  const memoized = new Map<string, FlowResponse>();
-
-  const keyFormatter = (
-    current: Valve,
-    time: number,
-    opened: Set<string>,
-    allValves: Set<string>
-  ) => {
-    const arr = [...opened.values()].sort();
-    // const arr2 = [...allValves.values()].sort();
-    return `${current.name};${time};${arr}`;
-  };
-
-  const maxFlow = function (
-    current: Valve,
-    time: number,
-    notOpened: Set<string>,
-    visited: {
-      name: string;
-      time: number;
-    }[],
-    allValves: Set<string>
-  ): FlowResponse {
-    const key = keyFormatter(
-      current,
-      time,
-      new Set(visited.map((v) => v.name)),
-      allValves
-    );
-    false && console.log("max flow for", key, visited);
-    const mValue = memoized.get(key);
-    if (mValue) {
-      false && console.log("cache hit!!", { key, mValue });
-      return mValue;
-    }
-
-    if (time < 2) {
-      // cannot get flow
-      const res = {
-        flow: 0,
-        visited,
-      };
-      memoized.set(key, res);
-      return res;
-    }
-
-    const flowResponses: FlowResponse[] = [];
-
-    // open if flow > 0 then go to next
-    if (current.flow > 0) {
-      const remainingTimeAfterOpeningValve = time - 1;
-      const totalFlowForOpeningCurrentValve =
-        current.flow * remainingTimeAfterOpeningValve;
-
-      // cannot get more flow from going to another valve either because none left, or not enough time
-      flowResponses.push({
-        flow: totalFlowForOpeningCurrentValve,
-        visited: [{ name: current.name, time }],
-      });
-
-      const newNotOpened = new Set(notOpened);
-      const currentDeleted = newNotOpened.delete(current.name);
-      false &&
-        console.log(
-          "removed",
-          current.name,
-          "from the unopened valves",
-          currentDeleted
-        );
-
-      for (let notOpenedValve of newNotOpened.values()) {
-        const numberOfSteps = pathFinder(current.name, notOpenedValve);
-
-        const nextNode = graph.get(notOpenedValve);
-        if (!nextNode) {
-          throw new Error(`impossible`);
-        }
-
-        if (numberOfSteps + 1 + 1 > remainingTimeAfterOpeningValve) {
-          // not enough time to go, open and collect once
-          false &&
-            console.log("do not go from", current.name, "to", notOpenedValve);
-          continue;
-        }
-
-        false &&
-          console.log(
-            "open current",
-            current.name,
-            "then visit next valve",
-            notOpenedValve
-          );
-
-        const newVisited = [...visited, { name: current.name, time }];
-
-        const openThenGoToNextNodeFlowResponse = maxFlow(
-          nextNode,
-          remainingTimeAfterOpeningValve - numberOfSteps,
-          newNotOpened,
-          newVisited,
-          allValves
-        );
-
-        const totalFlow =
-          totalFlowForOpeningCurrentValve +
-          openThenGoToNextNodeFlowResponse.flow;
-
-        flowResponses.push({
-          flow: totalFlow,
-          visited: [
-            { name: current.name, time },
-            ...openThenGoToNextNodeFlowResponse.visited,
-          ],
-        });
-      }
-    } else {
-      // go to next directly without opening current - should only happen when at valve AA
-      for (let possibleNode of notOpened.values()) {
-        if (possibleNode === current.name) {
-          continue;
-        }
-
-        const numberOfSteps = pathFinder(current.name, possibleNode);
-
-        const nextNode = graph.get(possibleNode);
-        if (!nextNode) {
-          throw new Error(`impossible`);
-        }
-
-        const newNotOpened = new Set(notOpened);
-
-        if (numberOfSteps + 1 + 1 > time) {
-          // not enough time to go, open and collect once
-          false &&
-            console.log("do not go from", current.name, "to", possibleNode);
-          continue;
-        }
-
-        false &&
-          console.log(
-            "from",
-            current.name,
-            "visit next node directly",
-            possibleNode
-          );
-
-        const goToNextNodeDirectlyFlowResponse = maxFlow(
-          nextNode,
-          time - numberOfSteps,
-          newNotOpened,
-          visited,
-          allValves
-        );
-
-        flowResponses.push({
-          flow: goToNextNodeDirectlyFlowResponse.flow,
-          visited: [...goToNextNodeDirectlyFlowResponse.visited],
-        });
-      }
-    }
-
-    if (flowResponses.length == 0) {
-      throw new Error(`flow responses are empty`);
-      const remainingTimeAfterOpeningValve = time - 1;
-      const totalFlowForOpeningCurrentValve =
-        current.flow * remainingTimeAfterOpeningValve;
-
-      flowResponses.push({
-        flow: totalFlowForOpeningCurrentValve,
-        visited: [{ name: current.name, time }],
-      });
-    }
-
-    flowResponses.sort((r1, r2) => r2.flow - r1.flow);
-
-    const res = flowResponses[0];
-    memoized.set(key, res);
-    return res;
-  };
-
-  return maxFlow;
 }
 
 function createMaxFlow(
@@ -650,12 +444,14 @@ function createMaxFlow(
   return maxFlow;
 }
 
-if (false) {
-  main("test.txt", 1651);
-  console.time("valve");
-  main("input.txt", 1880);
-  console.timeEnd("valve");
-}
+main("test.txt", 1651);
 
-// main2("test.txt", 1707);
+console.time("valve1");
+main("input.txt", 1880);
+console.timeEnd("valve1"); // 180ms
+
+main2("test.txt", 1707);
+
+console.time("valve2");
 main2("input.txt", 2520);
+console.timeEnd("valve2"); // 57 seconds
