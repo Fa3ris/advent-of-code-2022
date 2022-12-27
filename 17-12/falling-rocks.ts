@@ -19,6 +19,8 @@ interface BlockInformation {
 
   getHorizontals(): Horizontal[];
   getBlockPositions(): { row: number; col: number }[];
+
+  toSymbol(): string;
 }
 
 interface Rock extends Block, BlockInformation {}
@@ -89,9 +91,16 @@ class Horizontal implements Rock {
       maxRow: this.row,
     };
   }
+
+  toSymbol(): string {
+    return "-";
+  }
 }
 
 class Vertical implements Rock {
+  toSymbol(): string {
+    return "|";
+  }
   constructor(
     private col: number,
     private bottomRow: number,
@@ -195,6 +204,10 @@ abstract class CompositeRock implements Rock {
     this.components.forEach((c) => res.push(...c.getBlockPositions()));
     return res;
   }
+
+  toSymbol(): string {
+    throw new Error("method not implemented");
+  }
 }
 
 class Plus extends CompositeRock {
@@ -203,6 +216,10 @@ class Plus extends CompositeRock {
       new Horizontal(leftCol, bottomRow + 1, 3),
       new Vertical(leftCol + 1, bottomRow, 3),
     ]);
+  }
+
+  toSymbol(): string {
+    return "+";
   }
 }
 
@@ -213,6 +230,10 @@ class Angle extends CompositeRock {
       new Vertical(leftCol + 2, bottomRow, 3),
     ]);
   }
+
+  toSymbol(): string {
+    return "J";
+  }
 }
 
 class Square extends CompositeRock {
@@ -221,6 +242,9 @@ class Square extends CompositeRock {
       new Horizontal(leftCol, bottomRow, 2),
       new Horizontal(leftCol, bottomRow + 1, 2),
     ]);
+  }
+  toSymbol(): string {
+    return "[]";
   }
 }
 
@@ -232,7 +256,7 @@ class Grid {
   private height = 0;
 
   constructor(
-    private streamFactory: { next(): Stream },
+    private streamFactory: { next(): Stream; index(): number },
     private blockFactory: {
       next: (col: number, row: number) => Rock;
     }
@@ -243,16 +267,22 @@ class Grid {
   }
 
   log = false;
+
   dropBlock() {
     const rock = this.blockFactory.next(2, this.height + 3);
     this.log && console.log("begin drop");
     this.log && console.log(this.draw(rock));
+
+    let jetIndex = undefined;
 
     while (true) {
       this.log && console.log("begin turn");
       this.log && console.log(this.draw(rock));
 
       const stream = this.streamFactory.next();
+      if (jetIndex == undefined) {
+        jetIndex = this.streamFactory.index();
+      }
       stream.execute(rock);
 
       this.log && console.log("after stream", Object.getPrototypeOf(stream));
@@ -285,10 +315,20 @@ class Grid {
       }
     }
 
+    const prevHeight = this.height;
     this.height = Math.max(rock.getInfo().maxRow + 1, this.height);
+
+    const heightGained = this.height - prevHeight;
 
     this.log && console.log("end turn");
     this.log && console.log(this.draw());
+
+    return {
+      heightGained,
+      jetIndex,
+      rock: rock.toSymbol(),
+      profile: this.drawProfile(),
+    };
   }
 
   mergeHorizontals(line: Horizontal[], h: Horizontal): Horizontal[] {
@@ -367,6 +407,32 @@ class Grid {
     return false;
   }
 
+  // use height arg big enough to discriminate well
+  drawProfile(height = 10): string {
+    const maxRow = Math.max(height, this.height);
+
+    const minRow = maxRow - height;
+
+    const lines: string[] = [];
+    for (let i = maxRow; i >= minRow; i--) {
+      const horizontals = this.horizontalsRows[i];
+
+      const line: string[] = Array(this.width).fill(".");
+
+      if (horizontals) {
+        for (let h of horizontals) {
+          const { minCol, maxCol } = h.getInfo();
+          for (let c = minCol; c <= maxCol; c++) {
+            line[c] = "#";
+          }
+        }
+      }
+
+      lines.push(`|${line.join("")}|`);
+    }
+    return lines.join("\n");
+  }
+
   draw(fallingRock?: Rock): string {
     const fallingRockHeight = fallingRock?.getInfo().maxRow || -Infinity;
     const heightDisplayed = Math.max(this.height, fallingRockHeight) + 3;
@@ -442,30 +508,58 @@ function createStreamFactory(line: string) {
 
   let index = 0;
 
+  let currentIndex = 0;
   return {
     next: function () {
       if (index >= streams.length) {
         index = 0;
       }
+      currentIndex = index;
       return streams[index++];
     },
+    index: function () {
+      return currentIndex;
+    },
   };
+}
+
+function createGrid(line: string): Grid {
+  return new Grid(
+    createStreamFactory(line),
+    createBlockFactory([Horizontal, Plus, Angle, Vertical, Square])
+  );
 }
 
 function main(filename: string, answer?: number) {
   const [line] = readLines(resolve(__dirname, filename));
 
-  const grid = new Grid(
-    createStreamFactory(line),
-    createBlockFactory([Horizontal, Plus, Angle, Vertical, Square])
-  );
+  const grid = createGrid(line);
+
+  const states: State[] = [];
 
   for (let i = 0; i < 2022; i++) {
     false && console.log("drop", i + 1);
     if (false && [5].includes(i)) {
       grid.log = true;
     }
-    grid.dropBlock();
+    const state = grid.dropBlock();
+
+    states.push(state);
+
+    // console.log(state);
+    // console.log(state.profile);
+
+    if (i == 6) {
+      console.assert(
+        !equalState(states[0], states[1]),
+        "states should be different"
+      );
+      console.assert(
+        equalState(states[0], states[0]),
+        "state should be the same"
+      );
+      process.exit();
+    }
     grid.log = false;
     false && console.log(grid.draw());
     if (false && i < 9) console.log("\n\n");
@@ -476,7 +570,196 @@ function main(filename: string, answer?: number) {
   assertNumber(answer, grid.totalHeight);
 }
 
-main("test.txt", 3068);
-console.time("part1");
-main("input.txt", 3215);
-console.timeEnd("part1");
+function main2(filename: string, dropsToMake = 2022, answer?: number) {
+  const [line] = readLines(resolve(__dirname, filename));
+
+  const gridTortoise = createGrid(line);
+  const gridHare = createGrid(line);
+
+  // for (let i = 0; i < 2022; i++) {
+  //   console.log("drop", i);
+  //   const tortoiseState = gridTortoise.dropBlock();
+
+  //   gridHare.dropBlock();
+  //   const hareState = gridHare.dropBlock();
+
+  //   if (equalState(tortoiseState, hareState)) {
+  //     console.log({ tortoiseState, hareState, drop: i });
+  //     console.log(tortoiseState.profile);
+  //     break;
+  //   }
+  // }
+
+  let tortoiseState: State;
+  let hareState: State;
+  let drops = 0;
+  while (true) {
+    drops++;
+    tortoiseState = gridTortoise.dropBlock();
+
+    gridHare.dropBlock();
+    hareState = gridHare.dropBlock();
+
+    // if (drops == 1) {
+    //   console.log(gridTortoise.drawProfile());
+    //   console.log("\n\n");
+    // }
+
+    if (equalState(tortoiseState, hareState)) {
+      // console.log({ tortoiseState, hareState, drop: drops });
+      // console.log(tortoiseState.profile);
+      break;
+    } else {
+    }
+  }
+
+  console.log("drops to repeat", drops);
+  console.log(gridTortoise.drawProfile());
+  console.log(gridHare.drawProfile());
+
+  let startOfLoopIndex = 0;
+  const tortoiseGridForMu = createGrid(line); // start from beginning
+  let tortoiseStateForMu: State;
+
+  while (true) {
+    tortoiseStateForMu = tortoiseGridForMu.dropBlock();
+    hareState = gridHare.dropBlock();
+
+    startOfLoopIndex++;
+    if (equalState(tortoiseStateForMu, hareState)) {
+      break;
+    }
+  }
+
+  let cycleLength = 1;
+  const tortoiseStateAtStartOfLoop = tortoiseStateForMu;
+  console.log({ tortoiseStateAtStartOfLoop });
+  tortoiseState = tortoiseGridForMu.dropBlock();
+  while (!equalState(tortoiseState, tortoiseStateAtStartOfLoop)) {
+    tortoiseState = tortoiseGridForMu.dropBlock();
+    cycleLength++;
+  }
+
+  console.log({
+    startOfLoopIndex,
+    cycleLength,
+  });
+
+  const testGrid = createGrid(line);
+  let startOfLoopState: State | undefined = undefined;
+
+  for (let i = 0; i < startOfLoopIndex; i++) {
+    startOfLoopState = testGrid.dropBlock();
+  }
+
+  let firstCycleLoopState: State | undefined = undefined;
+
+  for (let i = 0; i < cycleLength; i++) {
+    firstCycleLoopState = testGrid.dropBlock();
+  }
+
+  console.log({
+    startOfLoopState,
+    firstCycleLoopState,
+  });
+
+  const compare1 = createGrid(line);
+  const compare2 = createGrid(line);
+
+  let compare1State: State | undefined = undefined;
+  let compare2State: State | undefined = undefined;
+
+  for (let i = 0; i < startOfLoopIndex; i++) {
+    compare1State = compare1.dropBlock();
+  }
+
+  for (let i = 0; i < startOfLoopIndex + cycleLength; i++) {
+    compare2State = compare2.dropBlock();
+  }
+
+  console.log({ compare1State, compare2State });
+
+  if (!compare1State || !compare2State) {
+    return;
+  }
+
+  if (!equalState(compare1State, compare2State)) {
+    throw new Error("unequal");
+  }
+  for (let i = 0; i < cycleLength; i++) {
+    compare1State = compare1.dropBlock();
+    compare2State = compare2.dropBlock();
+
+    if (!equalState(compare1State, compare2State)) {
+      throw new Error("unequal");
+    }
+  }
+
+  const finalGrid = createGrid(line);
+
+  let heightOfGrid = 0;
+  for (let i = 0; i < startOfLoopIndex; i++) {
+    heightOfGrid += finalGrid.dropBlock().heightGained;
+  }
+
+  let gainedHeightForOneCycle = 0;
+
+  let finalState: State;
+  for (let i = 0; i < cycleLength; i++) {
+    finalState = finalGrid.dropBlock();
+    gainedHeightForOneCycle += finalState.heightGained;
+  }
+
+  console.log({ gainedHeightForOneCycle });
+
+  const dropsRemainingAtBeginningOfLoop = dropsToMake - startOfLoopIndex;
+  const numberOfCycles = Math.floor(
+    dropsRemainingAtBeginningOfLoop / cycleLength
+  );
+  const dropsLeftOver = dropsRemainingAtBeginningOfLoop % cycleLength;
+
+  console.log({
+    dropsRemainingAtBeginningOfLoop,
+    numberOfCycles,
+    dropsLeftOver,
+  });
+  for (let i = 0; i < dropsLeftOver; i++) {
+    heightOfGrid += finalGrid.dropBlock().heightGained;
+  }
+  console.log({
+    heightOfGrid,
+    gridTotalHeight: finalGrid.totalHeight - gainedHeightForOneCycle,
+    totalHeightForAllCycles: numberOfCycles * gainedHeightForOneCycle,
+    totalHeightAnswer: heightOfGrid + numberOfCycles * gainedHeightForOneCycle,
+  });
+}
+
+if (false) {
+  main("test.txt", 3068);
+  console.time("part1");
+  main("input.txt", 3215);
+  console.timeEnd("part1");
+}
+
+main2("test.txt", 2022, 3068);
+main2("input.txt", 2022, 3215);
+
+main2("test.txt", 1000000000000, 1514285714288);
+main2("input.txt", 1000000000000, 1514285714288);
+
+type State = {
+  heightGained: number;
+  jetIndex: number;
+  rock: string;
+  profile: string;
+};
+
+function equalState(s1: State, s2: State): boolean {
+  const allEqual = Object.getOwnPropertyNames(s1).every((name) => {
+    const v1 = Object.getOwnPropertyDescriptor(s1, name)?.value;
+    const v2 = Object.getOwnPropertyDescriptor(s2, name)?.value;
+    return v1 === v2;
+  });
+
+  return allEqual;
+}
