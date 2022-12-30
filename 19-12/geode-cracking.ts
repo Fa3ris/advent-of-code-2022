@@ -1,3 +1,7 @@
+import { resolve } from "path";
+import { assertNumber } from "../helper/assert";
+import { readLines } from "../helper/read-lines";
+
 type Blueprint = {
   oreRobot: {
     ore: number;
@@ -39,6 +43,264 @@ type State = {
 function formatKey(t: number, s: State) {
   return `t:${t};${JSON.stringify(s)}`;
 }
+
+function collectGeodes2(
+  state: State,
+  time: number,
+  blueprint: Blueprint,
+  memoized: Map<string, State>
+): State {
+  const key = formatKey(time, state);
+
+  const m = memoized.get(key);
+  if (m) {
+    false && console.log("memoized");
+    return m;
+  }
+
+  if (time === 0) {
+    false && console.log("finalState", { finalState: state });
+    return state;
+  }
+
+  const statesToExplore: State[] = [];
+
+  const maxOreNeeded = Math.max(
+    blueprint.oreRobot.ore,
+    blueprint.clayRobot.ore,
+    blueprint.obsidianRobot.ore,
+    blueprint.geodeRobot.ore
+  );
+
+  const notEnoughOreRobot = state.robots.ore < maxOreNeeded;
+  const canBuildOreRobot = hasRobotToCreateOreRobot(state) && notEnoughOreRobot;
+
+  if (canBuildOreRobot) {
+    false && console.log("build ore", key);
+    const { time: newTime, state: newState } = newStateAfterOreRobot(
+      state,
+      time,
+      blueprint
+    );
+
+    false && console.log("built ore", formatKey(newTime, newState));
+
+    if (newTime > 0) {
+      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+
+      statesToExplore.push(s);
+    } else {
+      while (time > 0) {
+        state = collectResources(state);
+        time--;
+      }
+      statesToExplore.push(state);
+    }
+  }
+
+  const canBuildClayRobot =
+    hasRobotToCreateClayRobot(state) &&
+    state.robots.clay < blueprint.obsidianRobot.clay;
+
+  if (canBuildClayRobot) {
+    false && console.log("build clay", key);
+
+    const { time: newTime, state: newState } = newStateAfterClayRobot(
+      state,
+      time,
+      blueprint
+    );
+
+    false && console.log("built clay", formatKey(newTime, newState));
+
+    if (newTime > 0) {
+      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+
+      statesToExplore.push(s);
+    } else {
+      while (time > 0) {
+        state = collectResources(state);
+        time--;
+      }
+      statesToExplore.push(state);
+    }
+  }
+
+  const canBuildObsidianRobot =
+    hasRobotToCreateObsidianRobot(state) &&
+    state.robots.obsidian < blueprint.geodeRobot.obsidian;
+
+  if (canBuildObsidianRobot) {
+    false && console.log("build obsidian", key);
+
+    const { time: newTime, state: newState } = newStateAfterObsidianRobot(
+      state,
+      time,
+      blueprint
+    );
+
+    false && console.log("built obsidian", formatKey(newTime, newState));
+
+    if (newTime > 0) {
+      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+
+      statesToExplore.push(s);
+    } else {
+      while (time > 0) {
+        state = collectResources(state);
+        time--;
+      }
+      statesToExplore.push(state);
+    }
+  }
+
+  if (hasRobotToCreateGeodeRobot(state)) {
+    false && console.log("build geode", key);
+
+    const { time: newTime, state: newState } = newStateAfterGeodeRobot(
+      state,
+      time,
+      blueprint
+    );
+
+    false && console.log("built geode", formatKey(newTime, newState));
+
+    if (newTime > 0) {
+      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+
+      statesToExplore.push(s);
+    } else {
+      while (time > 0) {
+        state = collectResources(state);
+        time--;
+      }
+      statesToExplore.push(state);
+    }
+  }
+
+  statesToExplore.sort((s1, s2) => s2.geode - s1.geode);
+
+  false && console.log({ statesToExplore });
+
+  const s = statesToExplore[0];
+
+  memoized.set(key, s);
+
+  return s;
+}
+
+function hasRobotToCreateOreRobot(state: State): boolean {
+  return state.robots.ore > 0;
+}
+
+function hasRobotToCreateClayRobot(state: State): boolean {
+  return state.robots.ore > 0;
+}
+
+function hasRobotToCreateObsidianRobot(state: State): boolean {
+  return state.robots.ore > 0 && state.robots.clay > 0;
+}
+
+function hasRobotToCreateGeodeRobot(state: State): boolean {
+  return state.robots.ore > 0 && state.robots.obsidian > 0;
+}
+
+function newStateAfterOreRobot(
+  state: State,
+  time: number,
+  blueprint: Blueprint
+): {
+  time: number;
+  state: State;
+} {
+  let sufficientOre = state.ore >= blueprint.oreRobot.ore;
+
+  while (!sufficientOre) {
+    state = collectResources(state);
+    time--;
+    sufficientOre = state.ore >= blueprint.oreRobot.ore;
+  }
+
+  state = collectResources(state);
+  state = buildOreRobot(state, blueprint);
+  time--;
+  return { time, state };
+}
+
+function newStateAfterClayRobot(
+  state: State,
+  time: number,
+  blueprint: Blueprint
+): {
+  time: number;
+  state: State;
+} {
+  let sufficientOre = state.ore >= blueprint.clayRobot.ore;
+
+  while (!sufficientOre) {
+    state = collectResources(state);
+    time--;
+    sufficientOre = state.ore >= blueprint.clayRobot.ore;
+  }
+
+  state = collectResources(state);
+  state = buildClayRobot(state, blueprint);
+  time--;
+  return { time, state };
+}
+
+function newStateAfterObsidianRobot(
+  state: State,
+  time: number,
+  blueprint: Blueprint
+): {
+  time: number;
+  state: State;
+} {
+  let sufficientResources =
+    state.ore >= blueprint.obsidianRobot.ore &&
+    state.clay >= blueprint.obsidianRobot.clay;
+
+  while (!sufficientResources) {
+    state = collectResources(state);
+    time--;
+    sufficientResources =
+      state.ore >= blueprint.obsidianRobot.ore &&
+      state.clay >= blueprint.obsidianRobot.clay;
+  }
+
+  state = collectResources(state);
+  state = buildObsidianRobot(state, blueprint);
+  time--;
+  return { time, state };
+}
+
+function newStateAfterGeodeRobot(
+  state: State,
+  time: number,
+  blueprint: Blueprint
+): {
+  time: number;
+  state: State;
+} {
+  let sufficientResources =
+    state.ore >= blueprint.geodeRobot.ore &&
+    state.obsidian >= blueprint.geodeRobot.obsidian;
+
+  while (!sufficientResources) {
+    state = collectResources(state);
+    time--;
+    sufficientResources =
+      state.ore >= blueprint.geodeRobot.ore &&
+      state.obsidian >= blueprint.geodeRobot.obsidian;
+  }
+
+  state = collectResources(state);
+  state = buildGeodeRobot(state, blueprint);
+  time--;
+  return { time, state };
+}
+
 function collectGeodes(
   state: State,
   time: number,
@@ -218,8 +480,8 @@ function cloneState(s: State): State {
   return {
     ...s,
     robots: { ...s.robots },
-    history: [...s.history],
-    actions: [...s.actions],
+    // history: [...s.history],
+    // actions: [...s.actions],
   };
 }
 
@@ -258,38 +520,193 @@ if (false) {
   );
 
   console.log({ finalState });
-}
-const finalState2 = collectGeodes(
-  {
-    ore: 0,
-    clay: 0,
-    obsidian: 0,
-    geode: 0,
-    robots: {
-      ore: 1,
+
+  const finalState2 = collectGeodes(
+    {
+      ore: 0,
       clay: 0,
       obsidian: 0,
       geode: 0,
+      robots: {
+        ore: 1,
+        clay: 0,
+        obsidian: 0,
+        geode: 0,
+      },
+      history: [],
+      actions: [],
     },
-    history: [],
-    actions: [],
-  },
-  24,
-  {
-    oreRobot: {
-      ore: 2,
+    24,
+    {
+      oreRobot: {
+        ore: 2,
+      },
+      clayRobot: { ore: 3 },
+      obsidianRobot: {
+        ore: 3,
+        clay: 8,
+      },
+      geodeRobot: {
+        ore: 3,
+        obsidian: 12,
+      },
     },
-    clayRobot: { ore: 3 },
-    obsidianRobot: {
-      ore: 3,
-      clay: 8,
-    },
-    geodeRobot: {
-      ore: 3,
-      obsidian: 12,
-    },
-  },
-  new Map()
-);
+    new Map()
+  );
 
-console.log({ finalState2 });
+  console.log({ finalState2 });
+}
+
+const bp1 = {
+  oreRobot: {
+    ore: 4,
+  },
+  clayRobot: { ore: 2 },
+  obsidianRobot: {
+    ore: 3,
+    clay: 14,
+  },
+  geodeRobot: {
+    ore: 2,
+    obsidian: 7,
+  },
+};
+
+const bp2 = {
+  oreRobot: {
+    ore: 2,
+  },
+  clayRobot: { ore: 3 },
+  obsidianRobot: {
+    ore: 3,
+    clay: 8,
+  },
+  geodeRobot: {
+    ore: 3,
+    obsidian: 12,
+  },
+};
+
+if (false) {
+  const finalState = collectGeodes2(
+    {
+      ore: 0,
+      clay: 0,
+      obsidian: 0,
+      geode: 0,
+      robots: {
+        ore: 1,
+        clay: 0,
+        obsidian: 0,
+        geode: 0,
+      },
+      history: [],
+      actions: [],
+    },
+    24,
+    bp1,
+    new Map()
+  );
+
+  console.log({ finalState });
+
+  const finalState2 = collectGeodes2(
+    {
+      ore: 0,
+      clay: 0,
+      obsidian: 0,
+      geode: 0,
+      robots: {
+        ore: 1,
+        clay: 0,
+        obsidian: 0,
+        geode: 0,
+      },
+      history: [],
+      actions: [],
+    },
+    24,
+    bp2,
+    new Map()
+  );
+
+  console.log({ finalState2 });
+}
+
+function buildBluePrint(line: string): { bp: Blueprint; id: number } {
+  const re = /(\d+)/g;
+
+  const arr = Array.from(line.matchAll(re));
+
+  return {
+    id: Number(arr[0][0]),
+    bp: {
+      oreRobot: {
+        ore: Number(arr[1][0]),
+      },
+
+      clayRobot: {
+        ore: Number(arr[2][0]),
+      },
+      obsidianRobot: {
+        ore: Number(arr[3][0]),
+        clay: Number(arr[4][0]),
+      },
+      geodeRobot: {
+        ore: Number(arr[5][0]),
+        obsidian: Number(arr[6][0]),
+      },
+    },
+  };
+}
+
+if (false) {
+  const l =
+    "Blueprint 4: Each ore robot costs 4 ore. Each clay robot costs 3 ore. Each obsidian robot costs 4 ore and 20 clay. Each geode robot costs 4 ore and 8 obsidian.";
+
+  const { id, bp } = buildBluePrint(l);
+  console.log({ id, bp });
+}
+
+function main(filename: string, answer?: number) {
+  const lines = readLines(resolve(__dirname, filename));
+
+  let sumQualityLevel = 0;
+
+  lines.forEach((l) => {
+    const { id, bp } = buildBluePrint(l);
+
+    const finalState = collectGeodes2(
+      {
+        ore: 0,
+        clay: 0,
+        obsidian: 0,
+        geode: 0,
+        robots: {
+          ore: 1,
+          clay: 0,
+          obsidian: 0,
+          geode: 0,
+        },
+        history: [],
+        actions: [],
+      },
+      24,
+      bp,
+      new Map()
+    );
+
+    console.log({ finalState });
+    const geodes = finalState.geode;
+
+    const qualityLevel = id * geodes;
+    sumQualityLevel += qualityLevel;
+  });
+
+  console.log({ sumQualityLevel });
+
+  assertNumber(answer, sumQualityLevel);
+}
+
+main("test.txt", 33);
+main("input.txt", 1115);
