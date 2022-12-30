@@ -60,18 +60,6 @@ function collectGeodes(
     return state;
   }
 
-  if (canBuildGeodeRobot(state, blueprint)) {
-    false && console.log("build geode");
-    const collected = collectResources(state);
-    const builtGeode = buildGeodeRobot(collected, blueprint);
-
-    const s = collectGeodes(builtGeode, time - 1, blueprint, memoized);
-
-    memoized.set(key, s);
-
-    return s;
-  }
-
   const statesToExplore: State[] = [];
 
   const collectOnly = collectGeodes(
@@ -80,7 +68,18 @@ function collectGeodes(
     blueprint,
     memoized
   );
+
   statesToExplore.push(collectOnly);
+
+  if (canBuildGeodeRobot(state, blueprint)) {
+    false && console.log("build geode");
+    const collected = collectResources(state);
+    const builtGeode = buildGeodeRobot(collected, blueprint);
+
+    const s = collectGeodes(builtGeode, time - 1, blueprint, memoized);
+
+    statesToExplore.push(s);
+  }
 
   if (canBuildOreRobot(state, blueprint)) {
     false && console.log("build ore");
@@ -97,7 +96,6 @@ function collectGeodes(
     const builtClay = buildClayRobot(collected, blueprint);
 
     const s = collectGeodes(builtClay, time - 1, blueprint, memoized);
-    // const prev = addHistory(s, time);
     statesToExplore.push(s);
   }
 
@@ -122,7 +120,15 @@ function collectGeodes(
 }
 
 function canBuildOreRobot(state: State, blueprint: Blueprint): boolean {
-  return state.ore >= blueprint.oreRobot.ore;
+  const maxOreNeeded = Math.max(
+    blueprint.oreRobot.ore,
+    blueprint.clayRobot.ore,
+    blueprint.obsidianRobot.ore,
+    blueprint.geodeRobot.ore
+  );
+
+  const notEnoughRobot = state.robots.ore < maxOreNeeded;
+  return notEnoughRobot && state.ore >= blueprint.oreRobot.ore;
 }
 
 /* state will not lead to produce more geode robot collect what will be produced and return */
@@ -141,7 +147,9 @@ function buildOreRobot(state: State, blueprint: Blueprint): State {
 }
 
 function canBuildClayRobot(state: State, blueprint: Blueprint): boolean {
-  return state.ore >= blueprint.clayRobot.ore;
+  const notEnoughRobot = state.robots.clay < blueprint.obsidianRobot.clay;
+
+  return notEnoughRobot && state.ore >= blueprint.clayRobot.ore;
 }
 
 function buildClayRobot(state: State, blueprint: Blueprint): State {
@@ -152,7 +160,10 @@ function buildClayRobot(state: State, blueprint: Blueprint): State {
 }
 
 function canBuildObsidianRobot(state: State, blueprint: Blueprint): boolean {
+  const notEnoughRobot = state.robots.obsidian < blueprint.geodeRobot.obsidian;
+
   return (
+    notEnoughRobot &&
     state.ore >= blueprint.obsidianRobot.ore &&
     state.clay >= blueprint.obsidianRobot.clay
   );
@@ -212,7 +223,43 @@ function cloneState(s: State): State {
   };
 }
 
-const finalState = collectGeodes(
+if (false) {
+  const finalState = collectGeodes(
+    {
+      ore: 0,
+      clay: 0,
+      obsidian: 0,
+      geode: 0,
+      robots: {
+        ore: 1,
+        clay: 0,
+        obsidian: 0,
+        geode: 0,
+      },
+      history: [],
+      actions: [],
+    },
+    24,
+    {
+      oreRobot: {
+        ore: 4,
+      },
+      clayRobot: { ore: 2 },
+      obsidianRobot: {
+        ore: 3,
+        clay: 14,
+      },
+      geodeRobot: {
+        ore: 2,
+        obsidian: 7,
+      },
+    },
+    new Map()
+  );
+
+  console.log({ finalState });
+}
+const finalState2 = collectGeodes(
   {
     ore: 0,
     clay: 0,
@@ -230,19 +277,19 @@ const finalState = collectGeodes(
   24,
   {
     oreRobot: {
-      ore: 4,
+      ore: 2,
     },
-    clayRobot: { ore: 2 },
+    clayRobot: { ore: 3 },
     obsidianRobot: {
       ore: 3,
-      clay: 14,
+      clay: 8,
     },
     geodeRobot: {
-      ore: 2,
-      obsidian: 7,
+      ore: 3,
+      obsidian: 12,
     },
   },
   new Map()
 );
 
-console.log({ finalState });
+console.log({ finalState2 });
