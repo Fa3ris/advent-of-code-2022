@@ -48,15 +48,30 @@ function collectGeodes2(
   state: State,
   time: number,
   blueprint: Blueprint,
-  memoized: Map<string, State>
+  memoized: Map<string, State>,
+  bestSoFar = { val: -Infinity }
 ): State {
   const key = formatKey(time, state);
 
-  const m = memoized.get(key);
-  if (m) {
-    false && console.log("memoized");
-    return m;
+  let tempGeode = state.geode;
+  let tempGeodeRobots = state.robots.geode;
+  let tempTime = time;
+  while (tempTime > 0) {
+    tempGeode += tempGeodeRobots;
+    tempGeodeRobots++;
+    tempTime--;
   }
+
+  if (tempGeode < bestSoFar.val) {
+    // no need to explore
+    return state;
+  }
+
+  // const m = memoized.get(key);
+  // if (m) {
+  //   false && console.log("memoized");
+  //   return m;
+  // }
 
   if (time === 0) {
     false && console.log("finalState", { finalState: state });
@@ -86,7 +101,13 @@ function collectGeodes2(
     false && console.log("built ore", formatKey(newTime, newState));
 
     if (newTime > 0) {
-      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+      const s = collectGeodes2(
+        newState,
+        newTime,
+        blueprint,
+        memoized,
+        bestSoFar
+      );
 
       statesToExplore.push(s);
     } else {
@@ -114,7 +135,13 @@ function collectGeodes2(
     false && console.log("built clay", formatKey(newTime, newState));
 
     if (newTime > 0) {
-      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+      const s = collectGeodes2(
+        newState,
+        newTime,
+        blueprint,
+        memoized,
+        bestSoFar
+      );
 
       statesToExplore.push(s);
     } else {
@@ -142,7 +169,13 @@ function collectGeodes2(
     false && console.log("built obsidian", formatKey(newTime, newState));
 
     if (newTime > 0) {
-      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+      const s = collectGeodes2(
+        newState,
+        newTime,
+        blueprint,
+        memoized,
+        bestSoFar
+      );
 
       statesToExplore.push(s);
     } else {
@@ -166,7 +199,13 @@ function collectGeodes2(
     false && console.log("built geode", formatKey(newTime, newState));
 
     if (newTime > 0) {
-      const s = collectGeodes2(newState, newTime, blueprint, memoized);
+      const s = collectGeodes2(
+        newState,
+        newTime,
+        blueprint,
+        memoized,
+        bestSoFar
+      );
 
       statesToExplore.push(s);
     } else {
@@ -184,7 +223,11 @@ function collectGeodes2(
 
   const s = statesToExplore[0];
 
-  memoized.set(key, s);
+  bestSoFar.val = Math.max(s.geode, bestSoFar.val);
+
+  // memoized.set(key, s);
+
+  // bestGeodes.set(time, Math.max(s.geode, bestGeodes.get(time) || -Infinity));
 
   return s;
 }
@@ -708,5 +751,49 @@ function main(filename: string, answer?: number) {
   assertNumber(answer, sumQualityLevel);
 }
 
+function main2(filename: string, answer?: number) {
+  let lines = readLines(resolve(__dirname, filename));
+
+  let product = 1;
+
+  lines = lines.slice(0, 3);
+
+  lines.forEach((l) => {
+    const { id, bp } = buildBluePrint(l);
+
+    console.log("begin", id);
+    const finalState = collectGeodes2(
+      {
+        ore: 0,
+        clay: 0,
+        obsidian: 0,
+        geode: 0,
+        robots: {
+          ore: 1,
+          clay: 0,
+          obsidian: 0,
+          geode: 0,
+        },
+        history: [],
+        actions: [],
+      },
+      32,
+      bp,
+      new Map()
+    );
+
+    console.log({ finalState });
+    const geodes = finalState.geode;
+
+    product *= geodes;
+  });
+
+  console.log({ product: product });
+
+  assertNumber(answer, product);
+}
+
 main("test.txt", 33);
 main("input.txt", 1115);
+main2("test.txt", 3472);
+main2("input.txt", 25056);
