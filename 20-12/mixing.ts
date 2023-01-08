@@ -163,7 +163,7 @@ function findValueAtIndex(holders: NumberHolder[], i: number) {
 
   const { index: startIndex } = zeroHolder || {};
 
-  if (!startIndex) {
+  if (startIndex === undefined) {
     throw new Error("0 holder not found");
   }
 
@@ -241,5 +241,40 @@ function main(filename: string, answer?: number) {
   assertNumber(answer, sum);
 }
 
-main("test.txt", 3);
-main("input.txt", 1591);
+if (false) {
+  main("test.txt", 3);
+  main("input.txt", 1591);
+}
+
+function main2(filename: string, key: number = 811589153, answer?: number) {
+  const lines = readLines(resolve(__dirname, filename));
+  const numbers = lines.map(Number).map((v) => v * key);
+
+  const holders = numbers.map((val, index) => {
+    return { value: val, index: index };
+  });
+
+  LOG && console.log(toArray(holders));
+
+  for (let mix = 0; mix < 10; mix++) {
+    for (let index = 0; index < holders.length; index++) {
+      mixHolders(holders, index);
+    }
+    LOG && console.log("after mix", mix + 1);
+    LOG && console.log(toArray(holders));
+  }
+
+  const val1000th = findValueAtIndex(holders, 1000);
+
+  const val2000th = findValueAtIndex(holders, 2000);
+
+  const val3000th = findValueAtIndex(holders, 3000);
+
+  const sum = val1000th + val2000th + val3000th;
+  console.log({ sum });
+
+  assertNumber(answer, sum);
+}
+
+main2("test.txt", 811589153, 1623178306); // position of the values in the array do not match example but we only care about the cycling order
+main2("input.txt", 811589153, 14579387544492);
